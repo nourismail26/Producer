@@ -6,19 +6,29 @@
 #define shm_key 1234
 
 #include <sys/mman.h>
+/*
 struct commodity  {
     char name[10];
     float price;
     int id ;//unique id for each commodity
 };
-struct buffer {
-    commodity commodities[BUFFERSIZE];   // array of commodities 
-    int head;                
-    int tail;                
-    int count;               
-    sem_t mutex;             //semaphore for mutual exclusion
+*/
+struct commodity  {
+    std::string name;
+    double price;
+};
+struct buffer { 
+    commodity * inBuff;      //points to first empty place                
+    commodity * outBuff = NULL;      //points to first full place          
+    int count; 
+    /*              
+    sem_t mutex ;             //semaphore for mutual exclusion
     sem_t empty;             //semaphore for empty slots
     sem_t full;              //semaphore for full slots
+    */
+    sem_t *e = sem_open("empty_sem", O_CREAT, 0666, bufferSize); //hena haydrab error 3ashan mafeesh buffersize
+    sem_t *n = sem_open("full_sem", O_CREAT, 0666, 0);
+    sem_t *mutex = sem_open("mutex_sem", O_CREAT, 0666, 1);
 };
 
 buffer* attach_buffer_to_shm(const char* shm_name) {
