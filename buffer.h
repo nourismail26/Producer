@@ -2,25 +2,46 @@
 #define BUFFER_H
 #include <semaphore.h>
 
-#define BUFFERSIZE 40
 #define shm_key 1234
+#define ERROR -1
 
 #include <sys/mman.h>
+
 struct commodity  {
-    char name[10];
-    float price;
-    int id ;//unique id for each commodity
+    std::string name;
+    double price;
 };
-struct buffer {
-    commodity commodities[BUFFERSIZE];   // array of commodities 
-    int head;                
-    int tail;                
-    int count;               
-    sem_t mutex;             //semaphore for mutual exclusion
-    sem_t empty;             //semaphore for empty slots
-    sem_t full;              //semaphore for full slots
+struct buffer { 
+    commodity * inBuff;      //points to first empty place                
+    commodity * outBuff = NULL;      //points to first full place          
+    int count; 
+    sem_t *e ;
+    sem_t *n ;
+    sem_t *mutex ;
 };
 
+int get_shared_buffer(int size){ //returns the buffer id
+    key_t key = shm_key;
+    int buffer_id = shmget(key,size,0666 | IPC_CREAT); 
+        //key -> unique & identified by the user 
+        //buffer_id -> unique, returned by shmget & assigned by os  
+    return buffer_id;
+}
+
+buffer* attach_buffer(int size){    //attach the producer to buffer
+    int shared_buffer_id = get_shared_buffer(size);
+    buffer *result;
+
+    if (shared_buffer_id == ERROR){
+        return NULL;
+    }
+    result = (buffer*) shmat(shared_buffer_id, NULL,0 );
+    if (result == (buffer *)ERROR){
+        return NULL;
+    }
+    return result;
+
+}
 buffer* attach_buffer_to_shm(const char* shm_name) {
     void *ptr;
     const char* name = shm_name;

@@ -11,7 +11,6 @@
 #include <sys/shm.h>
 #include <cmath>
 #include <fcntl.h>
-#define sizeofbuffer 40
 #define shm_key 1234
 
 struct commodity  {
