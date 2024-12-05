@@ -15,10 +15,6 @@
 #define shm_key 1234
 #define ERROR -1
 
-struct commodity  {
-    std::string name;
-    double price;
-};
 double generate_price(double mean, double stddev){
     std::default_random_engine generator;
     std::normal_distribution<double> dist(mean, stddev);
@@ -36,28 +32,6 @@ bool add_to_buffer(commodity c){
     return false;
 }
 
-int get_shared_buffer(int size){ //returns the buffer id
-    key_t key = shm_key;
-    int buffer_id = shmget(key,size,0666 | IPC_CREAT); 
-        //key -> unique & identified by the user 
-        //buffer_id -> unique, returned by shmget & assigned by os  
-    return buffer_id;
-}
-
-buffer* attach_buffer(int size){    //attach the producer to buffer
-    int shared_buffer_id = get_shared_buffer(size);
-    buffer *result;
-
-    if (shared_buffer_id == ERROR){
-        return NULL;
-    }
-    result = (buffer*) shmat(shared_buffer_id, NULL,0 );
-    if (result == (buffer *)ERROR){
-        return NULL;
-    }
-    return result;
-
-}
 int main(int argc, char* argv[]) {
 
     //checking for the number of arguments
@@ -88,12 +62,6 @@ int main(int argc, char* argv[]) {
         return 1;
     }
   
-
-   //INITIALIZING THE SEMAPHORES
-    sem_t *e = sem_open("empty_sem", O_CREAT, 0666, bufferSize);
-    sem_t *n = sem_open("full_sem", O_CREAT, 0666, 0);
-    sem_t *mutex = sem_open("mutex_sem", O_CREAT, 0666, 1);
-
  while (true) {
 
         commodity c = produce(commodity_name,mean,stddev);
