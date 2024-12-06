@@ -1,7 +1,9 @@
 #ifndef BUFFER_H
 #define BUFFER_H
 #include <semaphore.h>
-
+#include <string>
+#include <cstddef>
+#include <sys/shm.h>
 #define shm_key 1234
 #define ERROR -1
 
@@ -14,7 +16,7 @@ struct commodity  {
 struct buffer { 
     commodity * inBuff;      //points to first empty place                
     commodity * outBuff = NULL;      //points to first full place          
-    int count; 
+    int size;  //actual size of the buffer
     sem_t *e ;
     sem_t *n ;
     sem_t *mutex ;
@@ -42,6 +44,7 @@ buffer* attach_buffer(int size){    //attach the producer to buffer
     return result;
 
 }
+/*
 buffer* attach_buffer_to_shm(const char* shm_name) {
     void *ptr;
     const char* name = shm_name;
@@ -75,5 +78,5 @@ buffer* attach_buffer_to_shm(const char* shm_name) {
 
 void producer(buffer* shared_buffer);
 void consumer(buffer* shared_buffer);
-
+*/
 #endif
