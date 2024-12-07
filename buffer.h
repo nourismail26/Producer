@@ -15,7 +15,7 @@ struct commodity  {
 };
 struct buffer { 
     commodity * inBuff;      //points to first empty place                
-    commodity * outBuff = inBuff;      //points to first full place          
+    commodity * outBuff ;     //points to first full place          
     int size;  //actual size of the buffer
     sem_t *e ;
     sem_t *n ;
@@ -49,6 +49,33 @@ if (result->e == nullptr || result->n == nullptr || result->mutex == nullptr) {
 
     return result;
 
+}
+void initialize_buffer(buffer* b, int size) {
+    // Set the buffer size
+    b->size = size;
+    
+    b->inBuff = new commodity[size];
+    b->outBuff = b->inBuff;           
+    // Initialize the semaphores
+    b->e = sem_open("/e", O_CREAT | O_EXCL, 0644, size);  
+    if (b->e == SEM_FAILED) {
+        std::cerr << "Error initializing semaphore e." << std::endl;
+        return;
+    }
+    
+    b->n = sem_open("/n", O_CREAT | O_EXCL, 0644, 0);  
+    if (b->n == SEM_FAILED) {
+        std::cerr << "Error initializing semaphore n." << std::endl;
+        return;
+    }
+    
+    b->mutex = sem_open("/mutex", O_CREAT | O_EXCL, 0644, 1); 
+    if (b->mutex == SEM_FAILED) {
+        std::cerr << "Error initializing semaphore mutex." << std::endl;
+        return;
+    }
+    
+    std::cout << "Buffer initialized with size " << size << std::endl;
 }
 /*
 buffer* attach_buffer_to_shm(const char* shm_name) {
