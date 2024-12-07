@@ -41,9 +41,12 @@ buffer* attach_buffer(int size){    //attach the producer to buffer
     if (result == (buffer *)ERROR){
         return NULL;
     }
-
+   if (result->inBuff != nullptr) {
+        std::cout << "Shared memory already initialized." << std::endl;
+        return result;
+    }
      initialize_buffer(result, size);
-
+     std::cout << "Shared memory initialized." << std::endl;
 
     return result;
 
