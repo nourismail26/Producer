@@ -41,40 +41,35 @@ buffer* attach_buffer(int size){    //attach the producer to buffer
     if (result == (buffer *)ERROR){
         return NULL;
     }
-if (result->e == nullptr || result->n == nullptr || result->mutex == nullptr) {
-        result->e = sem_open("/e", O_CREAT, 0644, size);   // Number of empty slots initially
-        result->n = sem_open("/n", O_CREAT, 0644, 0);       // Number of full slots initially 0
-        result->mutex = sem_open("/mutex", O_CREAT, 0644, 1); // Binary semaphore for mutual exclusion
-    }
+
+     initialize_buffer(result, size);
+
 
     return result;
 
 }
 void initialize_buffer(buffer* b, int size) {
+     // Initialize semaphores and buffer structure
     b->size = size;
+    b->inBuff = new commodity[size]; // Allocate memory for commodities in buffer
+    b->outBuff = b->inBuff;  // Set outBuff to the start of the buffer
+    b->e = sem_open("/empty", O_CREAT, 0666, size);  // Semaphore for empty slots
+    b->n = sem_open("/full", O_CREAT, 0666, 0);            // Semaphore for full slots
+    b->mutex = sem_open("/mutex", O_CREAT, 0666, 1);       // Mutex semaphore for critical sections
+
+}
+
+void cleanup_buffer(buffer* b) {
+    // Cleanup semaphores and shared memory
+    sem_close(b->e);
+    sem_close(b->n);
+    sem_close(b->mutex);
+    sem_unlink("/empty");
+    sem_unlink("/full");
+    sem_unlink("/mutex");
     
-    b->inBuff = new commodity[size];
-    b->outBuff = b->inBuff;           
-    // Initialize the semaphores
-    b->e = sem_open("/e", O_CREAT | O_EXCL, 0644, size);  
-    if (b->e == SEM_FAILED) {
-        std::cerr << "Error initializing semaphore e." << std::endl;
-        return;
-    }
-    
-    b->n = sem_open("/n", O_CREAT | O_EXCL, 0644, 0);  
-    if (b->n == SEM_FAILED) {
-        std::cerr << "Error initializing semaphore n." << std::endl;
-        return;
-    }
-    
-    b->mutex = sem_open("/mutex", O_CREAT | O_EXCL, 0644, 1); 
-    if (b->mutex == SEM_FAILED) {
-        std::cerr << "Error initializing semaphore mutex." << std::endl;
-        return;
-    }
-    
-    std::cout << "Buffer initialized with size " << size << std::endl;
+    // Detach from shared memory
+    shmdt(b);
 }
 /*
 buffer* attach_buffer_to_shm(const char* shm_name) {
