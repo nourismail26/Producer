@@ -51,7 +51,6 @@ if (result->e == nullptr || result->n == nullptr || result->mutex == nullptr) {
 
 }
 void initialize_buffer(buffer* b, int size) {
-    // Set the buffer size
     b->size = size;
     
     b->inBuff = new commodity[size];
