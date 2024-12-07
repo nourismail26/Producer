@@ -6,74 +6,90 @@
 #include <sys/shm.h>
 #define shm_key 1234
 #define ERROR -1
+#include <fcntl.h>  
 
-#include <sys/mman.h>
+
 
 struct commodity  {
     std::string name;
     double price;
 };
+#pragma pack(1)  // Ensure no padding
 struct buffer { 
-    commodity * inBuff;      //points to first empty place                
-    commodity * outBuff ;     //points to first full place          
-    int size;  //actual size of the buffer
-    sem_t *e ;
-    sem_t *n ;
-    sem_t *mutex ;
+    int size;               // Actual size of the buffer
+    int inIndex;            // Points to the next empty slot
+    int outIndex;           // Points to the next full slot
+    sem_t e;               // Semaphore for empty slots
+    sem_t n;               // Semaphore for full slots
+    sem_t mutex;           // Mutex for critical sections
+    commodity commodities[]; // Flexible array for commodities
 };
 
-int get_shared_buffer(int size){ //returns the buffer id
+
+int get_shared_buffer(int buffersize){ //returns the buffer id
     key_t key = shm_key;
-    int buffer_id = shmget(key,size,0666 | IPC_CREAT); 
+    std::cout << "shmget: key = " << shm_key << ", size = " << buffersize << std::endl;
+
+    int buffer_id = shmget(key,buffersize,0666 | IPC_CREAT); 
         //key -> unique & identified by the user 
         //buffer_id -> unique, returned by shmget & assigned by os  
     return buffer_id;
 }
-
-buffer* attach_buffer(int size){    //attach the producer to buffer
-    int shared_buffer_id = get_shared_buffer(size);
-    buffer *result;
-
-    if (shared_buffer_id == ERROR){
-        return NULL;
+buffer* initialize_buffer(int bufferSize) {
+    // Create shared memory
+    int shm_id = shmget(shm_key, sizeof(buffer), IPC_CREAT | 0666);
+    if (shm_id == -1) {
+        perror("shmget");
+        exit(1);
     }
-    result = (buffer*) shmat(shared_buffer_id, NULL,0 );
-    if (result == (buffer *)ERROR){
-        return NULL;
-    }
-   if (result->inBuff != nullptr) {
-        std::cout << "Shared memory already initialized." << std::endl;
-        return result;
-    }
-     initialize_buffer(result, size);
-     std::cout << "Shared memory initialized." << std::endl;
 
-    return result;
+    // Attach to the shared memory
+    buffer* b = (buffer*)shmat(shm_id, nullptr, 0);
+    if (b == (void*)-1) {
+        perror("shmat");
+        exit(1);
+    }
 
+    // Initialize buffer structure
+    b->size = bufferSize;
+    b->inIndex = 0;
+    b->outIndex = 0;
+
+    // Initialize semaphores
+    sem_init(&b->e, 1, bufferSize);  // Empty slots semaphore
+    sem_init(&b->mutex, 1, 1);       // Mutex semaphore
+    sem_init(&b->n, 1, 0);           // Full slots semaphore
+
+    return b;
 }
-void initialize_buffer(buffer* b, int size) {
-     // Initialize semaphores and buffer structure
-    b->size = size;
-    b->inBuff = new commodity[size]; // Allocate memory for commodities in buffer
-    b->outBuff = b->inBuff;  // Set outBuff to the start of the buffer
-    b->e = sem_open("/empty", O_CREAT, 0666, size);  // Semaphore for empty slots
-    b->n = sem_open("/full", O_CREAT, 0666, 0);            // Semaphore for full slots
-    b->mutex = sem_open("/mutex", O_CREAT, 0666, 1);       // Mutex semaphore for critical sections
 
+
+buffer* attach_buffer() {
+    // Get the shared memory ID
+    int shm_id = shmget(shm_key, sizeof(buffer), 0666); // Use the same key and size as the producer
+    if (shm_id == -1) {
+        perror("shmget");
+        exit(1);
+    }
+
+    // Attach to the shared memory
+    buffer* b = (buffer*)shmat(shm_id, nullptr, 0);
+    if (b == (void*)-1) {
+        perror("shmat");
+        exit(1);
+    }
+
+    return b; // Return the pointer to the buffer
 }
+
 
 void cleanup_buffer(buffer* b) {
-    // Cleanup semaphores and shared memory
-    sem_close(b->e);
-    sem_close(b->n);
-    sem_close(b->mutex);
-    sem_unlink("/empty");
-    sem_unlink("/full");
-    sem_unlink("/mutex");
-    
-    // Detach from shared memory
+    sem_destroy(&b->e);
+    sem_destroy(&b->n);
+    sem_destroy(&b->mutex);
     shmdt(b);
 }
+
 /*
 buffer* attach_buffer_to_shm(const char* shm_name) {
     void *ptr;

@@ -32,9 +32,16 @@ commodity produce(std::string Name , double mean , double stddev){
     return c;
 
 }
-bool add_to_buffer(commodity c){
-    message = "adding a new value to buffer " + std::to_string(c.price) + "\n";
-    return false;
+bool add_to_buffer(buffer* b, commodity c) {
+    // Add the commodity to the buffer at the current inIndex
+    b->commodities[b->inIndex] = c;
+
+    // Increment the inIndex and wrap around for circular buffer
+    b->inIndex = (b->inIndex + 1) % b->size;
+
+    // Log the action
+    message = "Added a commodity to buffer: " + c.name + " with price " + std::to_string(c.price) + "\n";
+    return true;
 }
 void logMessage(std::string name){
 
@@ -52,8 +59,7 @@ void sleep(int sleepInterval){
     std::this_thread::sleep_for(std::chrono::milliseconds(sleepInterval)); //to wait for a while before reproducing
 }
 int main(int argc, char* argv[]) {
-
-    //checking for the number of arguments
+    // Validate arguments
     if (argc < 6) {
         std::cerr << "Usage: <program_name> <commodity> <mean> <stddev> <sleep interval> <size of buffer>\n";
         return 1;
@@ -65,54 +71,48 @@ int main(int argc, char* argv[]) {
     int sleepInterval = std::stoi(argv[4]); // in milliseconds
     int bufferSize = std::stoi(argv[5]);
 
-    
-      //print the values of the variables
-    std::cout << "Commodity Name: " << commodity_name << std::endl;
-    std::cout << "Mean: " << mean << std::endl;
-    std::cout << "Standard Deviation: " << stddev << std::endl;
-    std::cout << "Sleep Interval: " << sleepInterval << " ms" << std::endl;
-    std::cout << "Buffer Size: " << bufferSize << std::endl;
-
-     if (bufferSize <= 0) {
+    if (bufferSize <= 0) {
         std::cerr << "Buffer size must be a positive integer.\n";
         return 1;
     }
-     if (commodity_name.length() >= 10) {
+
+    if (commodity_name.length() >= 10) {
         std::cerr << "Error: Commodity name must be shorter than 10 characters.\n";
         return 1;
     }
 
-    //attaching the producer to the buffer
-    int size = sizeof(commodity)*bufferSize;
-    buffer *b = attach_buffer(size); 
-    sem_t *e = b->e;
-    sem_t *mutex = b->mutex;
-    sem_t *n = b->n;
-    commodity *inbuff = b->inBuff;
-    //int size = b->size;
 
- while (true) {
 
-        commodity c = produce(commodity_name,mean,stddev);
+    // Initialize buffer structure and semaphores (only done by the producer)
+   buffer* b = initialize_buffer(bufferSize);
+    // Producer loop
+    while (true) {
+        std::cout << "\nWaiting on e..." << std::endl;
+        sem_wait(&b->e);  // Wait until there’s space in the buffer
+        commodity c = produce(commodity_name, mean, stddev);
         logMessage(commodity_name);
-        sem_wait(e);  
         message = "Trying to get mutex on shared buffer\n";
-        logMessage(commodity_name);    
-        sem_wait(mutex);  
-        add_to_buffer(c);
-        logMessage(commodity_name);   
-        sem_post(mutex);
-        sem_post(n); 
         logMessage(commodity_name);
-        message = "Sleeping for "+std::to_string(sleepInterval) + "\n";
-        sleep(sleepInterval);
+        std::cout << "Waiting on mutex..." << std::endl;
+        sem_wait(&b->mutex);  // Enter critical section
+        std::cout << "Producer acquired mutex, modifying buffer..." << std::endl;
+        if (add_to_buffer(b, c)) {
+            logMessage(commodity_name);  // Log success
+        }
+        sem_post(&b->mutex);  // Leave critical section
+        sem_post(&b->n);      // Signal that there’s a new full slot in the buffer
+        message = "Sleeping for " + std::to_string(sleepInterval) + " ms\n";
+        logMessage(commodity_name);
+        sleep(sleepInterval);  // Sleep for the specified interval
     }
 
-    ///shmdt(mybuffer);
-    sem_close(e);
-    sem_close(n);
-    sem_close(mutex);
-
- return 0;
+    // Cleanup (done by the producer when exiting)
+    shmdt(b);
+    sem_destroy(&b->e);
+    sem_destroy(&b->mutex);
+    sem_destroy(&b->n);
+    
+    return 0;
 }
+
 
