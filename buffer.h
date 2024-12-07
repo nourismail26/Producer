@@ -15,7 +15,7 @@ struct commodity  {
 };
 struct buffer { 
     commodity * inBuff;      //points to first empty place                
-    commodity * outBuff = NULL;      //points to first full place          
+    commodity * outBuff = inBuff;      //points to first full place          
     int size;  //actual size of the buffer
     sem_t *e ;
     sem_t *n ;
@@ -41,6 +41,12 @@ buffer* attach_buffer(int size){    //attach the producer to buffer
     if (result == (buffer *)ERROR){
         return NULL;
     }
+if (result->e == nullptr || result->n == nullptr || result->mutex == nullptr) {
+        result->e = sem_open("/e", O_CREAT, 0644, size);   // Number of empty slots initially
+        result->n = sem_open("/n", O_CREAT, 0644, 0);       // Number of full slots initially 0
+        result->mutex = sem_open("/mutex", O_CREAT, 0644, 1); // Binary semaphore for mutual exclusion
+    }
+
     return result;
 
 }
