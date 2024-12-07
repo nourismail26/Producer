@@ -94,6 +94,13 @@ void *compute_next_gen(void *arg)
         }
     }
     pthread_barrier_wait(&barrier);
+
+    //next grid temporarily stores the changes 
+    //fa lazem n copy el changes fel grid el asleya 
+    //lama el thread teb2a 0
+    // lw ma3malnash keda
+    // el threads kolaha momken tehawel ta3mel keda 
+    // w yekhosho feh race condition 
     
     if (data->thread_num == 0) {
     for (int row = 0; row < GRID_SIZE; row++) {
@@ -156,10 +163,13 @@ int main()
         
         for (int i = 0; i < NUM_THREADS; i++) {
             thread_data[i].start_row = i * (GRID_SIZE / NUM_THREADS);
-            thread_data[i].end_row =  (i + 1) * (GRID_SIZE / NUM_THREADS); 
+
+
+            thread_data[i].end_row = (i + 1) * (GRID_SIZE / NUM_THREADS);
+
             thread_data[i].thread_num = i;
 
-            pthread_create(&threads[i], NULL, compute_next_gen, (void*)&thread_data[i]);
+            pthread_create(&threads[i], NULL, compute_next_gen,&thread_data[i]);
         }
 
         
