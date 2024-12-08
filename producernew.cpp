@@ -20,7 +20,7 @@ std::string message ;  //global variable -> to track the message to be logged
 int global_commodity_id = 0;  // Global counter to track IDs
 
 double generate_price(double mean, double stddev){
-    std::default_random_engine generator;
+    static std::default_random_engine generator;
     std::normal_distribution<double> dist(mean, stddev);
     return dist(generator);
 }
