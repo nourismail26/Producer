@@ -13,8 +13,9 @@ struct commodity  {
     std::string name;
     double price;
 };
+
 struct buffer { 
-    commodity * inBuff;      //points to first empty place                
+    commodity * inBuff ;      //points to first empty place                
     commodity * outBuff = inBuff;      //points to first full place          
     int size;  //actual size of the buffer
     sem_t *e ;
