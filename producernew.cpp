@@ -17,21 +17,35 @@
 #define shm_key 1234
 #define ERROR -1
 std::string message ;  //global variable -> to track the message to be logged 
+int global_commodity_id = 0;  // Global counter to track IDs
 
 double generate_price(double mean, double stddev){
     std::default_random_engine generator;
     std::normal_distribution<double> dist(mean, stddev);
     return dist(generator);
 }
-
-commodity produce(const char* Name , double mean , double stddev){
-    commodity c ;
+commodity intialize_commodity(const char* Name , double mean , double stddev){
+    commodity c;
     strncpy(c.name, Name, sizeof(c.name) - 1);
     c.name[sizeof(c.name) - 1] = '\0'; 
-    c.price = generate_price(mean , stddev);
-    message = "generating a new value of " + std::to_string(c.price) + "\n";
+    c.price = generate_price(mean, stddev);
+
+    // Get a unique ID from shared memory
+    c.id = get_next_id();
+    message = "Generating a new value of " + std::to_string(c.price) + " with ID: " + std::to_string(c.id) + "\n";
     return c;
 
+}
+commodity produce(const char* Name, double mean, double stddev, int id) {
+    commodity c;
+    strncpy(c.name, Name, sizeof(c.name) - 1);
+    c.name[sizeof(c.name) - 1] = '\0'; 
+    c.price = generate_price(mean, stddev);
+
+    // Use the provided ID to ensure the same ID is used for each commodity
+    c.id = id;
+    message = "Generating a new value of " + std::to_string(c.price) + " with ID: " + std::to_string(c.id) + "\n";
+    return c;
 }
 bool add_to_buffer(buffer* b, commodity c,int N_input) {
     // Add the commodity to the buffer at the current in_index
@@ -76,10 +90,10 @@ void producer(const char* name, double mean,double stddev, int sleepInterval ,in
         std::cerr << "Error: Failed to open semaphores.\n";
         exit(1);
     }
-
+    static commodity item = intialize_commodity(name, mean, stddev);
     // Produce an item
     sem_wait(empty);  // Wait for an empty slot
-    commodity item = produce(name, mean, stddev);
+   commodity produced_item = produce(name, mean, stddev, item.id);
     logMessage(name);
     message = "Trying to get mutex on shared buffer\n";
     logMessage(name);
@@ -105,6 +119,11 @@ int main(int argc, char* argv[]) {
     if (argc > 1 && std::string(argv[1]) == "init") {
         initialize_shared_resources();
         std::cout << "Shared resources initialized.\n";
+        return 0;
+    }
+    if (argc > 1 && std::string(argv[1]) == "clean") {
+        cleanup_shared_resources();
+        std::cout << "Shared resources cleaned.\n";
         return 0;
     }
      if (argc < 6) {
