@@ -80,10 +80,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "Error: Commodity name must be shorter than 10 characters.\n";
         return 1;
     }
-
-
-
-    // Initialize buffer structure and semaphores (only done by the producer)
+ // Initialize buffer structure and semaphores (only done by the producer)
    buffer* b = initialize_buffer(bufferSize);
     // Producer loop
     while (true) {

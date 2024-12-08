@@ -70,7 +70,6 @@ void consume(commodity c) {
 commodity take_from_buffer(buffer* b) {
     if (b->outIndex < 0 || b->outIndex >= b->size) {
         std::cerr << "Error: outIndex is out of bounds." << std::endl;
-        
         return {};
     }
     
@@ -93,7 +92,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     
-    buffer *b = attach_buffer( ); // Attach to the shared memory buffer
+    buffer *b = attach_buffer(); // Attach to the shared memory buffer
     sem_t* e = &b->e;
     sem_t* mutex = &b->mutex;
     sem_t* n = &b->n;
@@ -106,11 +105,6 @@ int main(int argc, char* argv[]) {
         sem_wait(mutex);
         std::cout << "Consumer acquired mutex, modifying buffer..." << std::endl;
          printf("Consumer: size=%d, inIndex=%d, outIndex=%d\n", b->size, b->inIndex, b->outIndex);
-         if (b->outIndex < 0 || b->outIndex >= b->size) {
-    std::cerr << "Error: outIndex out of bounds.\n";
-    sem_post(&b->mutex); // Release mutex if already acquired
-    continue; // Skip to the next iteration
-}
 
          // Take a commodity from the buffer
         commodity c = take_from_buffer(b);
