@@ -1,3 +1,4 @@
+#include "buffer.h"
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -11,19 +12,11 @@
 #include <sys/shm.h>
 #include <cmath>
 #include <fcntl.h>
+#include "buffer.h"
 #include <time.h>
-#include <sys/sem.h>
-#define SHARED_MEM_KEY 2003
+#define shm_key 1234
 #define ERROR -1
-
-struct sembuf waiting= {0, -1, SEM_UNDO}; //decrementing the semaphore
-struct sembuf signaling = {0, 1, SEM_UNDO};  //incrementin the semaphore
-int inBuff = 0; //global variable to track where the to place the commodity
-
-struct commodity  {
-    std::string name;
-    double price;
-}; 
+std::string message ;  //global variable -> to track the message to be logged 
 
 double generate_price(double mean, double stddev){
     std::default_random_engine generator;
@@ -31,20 +24,27 @@ double generate_price(double mean, double stddev){
     return dist(generator);
 }
 
-commodity produce(std::string Name , double mean , double stddev,std::string message){
+commodity produce(const char* Name , double mean , double stddev){
     commodity c ;
-    c.name = Name;
+    strncpy(c.name, Name, sizeof(c.name) - 1);
+    c.name[sizeof(c.name) - 1] = '\0'; 
     c.price = generate_price(mean , stddev);
     message = "generating a new value of " + std::to_string(c.price) + "\n";
     return c;
 
 }
-void add_to_buffer(commodity c,commodity* buffer,int bufferSize,std::string message){
-    message = "adding a new value to buffer " + std::to_string(c.price) + "\n";
-    buffer[inBuff] = c;
-    inBuff = (inBuff+1)%bufferSize;
+bool add_to_buffer(buffer* b, commodity c,int N_input) {
+    // Add the commodity to the buffer at the current in_index
+    b->items[b->in_index] = c;
+
+    // Increment the in_index and wrap around for circular buffer
+    b->in_index = (b->in_index + 1) % N_input;
+
+    // Log the action
+    message = "Added a commodity to buffer: " + std::string(c.name)+ " with price " + std::to_string(c.price) + "\n";
+    return true;
 }
-void logMessage(std::string name,std::string message){
+void logMessage(std::string name){
 
     timespec timeptr;
     clock_gettime(CLOCK_REALTIME, &timeptr);
@@ -59,94 +59,82 @@ void logMessage(std::string name,std::string message){
 void sleep(int sleepInterval){
     std::this_thread::sleep_for(std::chrono::milliseconds(sleepInterval)); //to wait for a while before reproducing
 }
-int get_semaphore(int key) {  
-    key_t k = ftok("for_the_key", key); 
-    if (k == -1) {  
-        perror("ftok");        
-        return ERROR;     }    
-    int semid = semget(k, 1, 0666); 
-    if (semid == -1) {      
-        perror("semget");        
-        return ERROR;     }    
-    return semid; 
-}
-
-int get_shared_buffer(int size){ //returns the buffer id
-    key_t key = SHARED_MEM_KEY;
-    int buffer_id = shmget(key,size,0666); 
-        //key -> unique & identified by the user 
-        //buffer_id -> unique, returned by shmget & assigned by os  
-    return buffer_id;
-}
-
-commodity* attach_to_buffer(int size){    //attach the producer to buffer
-    int shared_buffer_id = get_shared_buffer(size);
-    commodity *buffer;
-
-    if (shared_buffer_id == ERROR){
-        return NULL;
+void producer(const char* name, double mean,double stddev, int sleepInterval ,int N_input) {
+    // Attach to shared memory
+    buffer* buf = attach_to_buffer();
+    if (!buf) {
+        std::cerr << "Error: Failed to attach to shared buffer.\n";
+        exit(1);
     }
-    buffer = (commodity*) shmat(shared_buffer_id, NULL,0 );
-    if (buffer == (commodity*)ERROR){
-        return NULL;
+
+    // Open semaphores
+    sem_t* empty = sem_open(SEM_EMPTY, 0);
+    sem_t* full = sem_open(SEM_FULL, 0);
+    sem_t* mutex = sem_open(SEM_MUTEX, 0);
+
+    if (!empty || !full || !mutex) {
+        std::cerr << "Error: Failed to open semaphores.\n";
+        exit(1);
     }
-    return buffer;
+
+    // Produce an item
+    sem_wait(empty);  // Wait for an empty slot
+    commodity item = produce(name, mean, stddev);
+    logMessage(name);
+    message = "Trying to get mutex on shared buffer\n";
+    logMessage(name);
+    sem_wait(mutex);  // Lock the critical section
+    std::cout << "Producer acquired mutex, modifying buffer..." << std::endl;
+        if (add_to_buffer(buf, item,N_input)) {
+            logMessage(name);  // Log success
+        }
+   // commodity item;
+   // strncpy(item.name, name, sizeof(item.name) - 1);
+   // item.price = price;
+
+    std::cout << "Produced: " << item.name << ", " << item.price << "\n";
+
+    sem_post(mutex);  // Unlock the critical section
+    sem_post(full);   // Signal a full slot
+     message = "Sleeping for " + std::to_string(sleepInterval) + " ms\n";
+        logMessage(name);
+        sleep(sleepInterval);
 }
 
 int main(int argc, char* argv[]) {
-
-    //checking for the number of arguments
-    if (argc < 6) {
+    if (argc > 1 && std::string(argv[1]) == "init") {
+        initialize_shared_resources();
+        std::cout << "Shared resources initialized.\n";
+        return 0;
+    }
+     if (argc < 6) {
         std::cerr << "Usage: <program_name> <commodity> <mean> <stddev> <sleep interval> <size of buffer>\n";
         return 1;
     }
 
-    std::string commodity_name = argv[1];
+    const char* name = argv[1];
     double mean = std::stod(argv[2]);
     double stddev = std::stod(argv[3]);
     int sleepInterval = std::stoi(argv[4]); // in milliseconds
-    int bufferSize = std::stoi(argv[5]);
+    int N_input = std::stoi(argv[5]);
 
-    if (bufferSize <= 0) {
+    if (N_input <= 0) {
         std::cerr << "Buffer size must be a positive integer.\n";
         return 1;
     }
 
-  //getting the semaphores  e->10 , mutex->20 , n->30
-  int e = get_semaphore(10);  
-  int mutex = get_semaphore(20);  
-  int n = get_semaphore(30);
-
-  if (e == ERROR || mutex == ERROR || n == ERROR) { 
-    std::cerr << "Error accessing semaphores.\n"; return 1; 
-  }
-
-   //initialize buffer and an index -> for the first empty place
-    commodity *buffer = NULL; 
- 
-   //attach to shared memory
-    int buffSizeInBytes = bufferSize * sizeof(commodity);
-    buffer = attach_to_buffer(buffSizeInBytes); //pointer to the first place in shared memory
- 
-    std::string message = ""; 
-
- while (true) {
-
-        commodity c = produce(commodity_name,mean,stddev,message);
-            logMessage(commodity_name,message);
-        semop(e,&waiting,1); 
-            message = "Trying to get mutex on shared buffer\n";
-            logMessage(commodity_name,message);    
-        semop(mutex,&waiting,1);  
-        add_to_buffer(c,buffer,bufferSize,message);
-            logMessage(commodity_name,message);   
-        semop(mutex , &signaling,1);
-        semop(n,&signaling,1);
-            logMessage(commodity_name,message);
-            message = "Sleeping for "+std::to_string(sleepInterval) + "\n";
-        sleep(sleepInterval);
+    if (strlen(name) >= 10) {
+        std::cerr << "Error: Commodity name must be shorter than 10 characters.\n";
+        return 1;
+    }
+  /*  if (argc < 3) {
+        std::cerr << "Usage: " << argv[0] << " <name> <price>\n";
+        return 1;
     }
 
- return 0;
+    const char* name = argv[1];
+    double price = std::stod(argv[2]);*/
+while(1)
+    producer(name,mean,stddev,sleepInterval,N_input);
+    return 0;
 }
-

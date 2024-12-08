@@ -1,89 +1,87 @@
 #ifndef BUFFER_H
 #define BUFFER_H
+
 #include <semaphore.h>
-#include <string>
-#include <cstddef>
 #include <sys/shm.h>
-#define shm_key 1234
+#include <sys/types.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <cstring>
+#include <iostream>
+
+#define SHARED_MEM_KEY 1234
+#define BUFFER_SIZE 10 
 #define ERROR -1
 
-#include <sys/mman.h>
-
-struct commodity  {
-    std::string name;
+// Commodity structure
+struct commodity {
+    char name[32];
     double price;
 };
 
-struct buffer { 
-    commodity * inBuff ;      //points to first empty place                
-    commodity * outBuff = inBuff;      //points to first full place          
-    int size;  //actual size of the buffer
-    sem_t *e ;
-    sem_t *n ;
-    sem_t *mutex ;
+// Shared buffer structure
+struct buffer {
+    commodity items[BUFFER_SIZE];  // Array to store commodities
+    int in_index;                 // Points to the next empty slot
+    int out_index;                // Points to the next full slot
 };
 
-int get_shared_buffer(int size){ //returns the buffer id
-    key_t key = shm_key;
-    int buffer_id = shmget(key,size,0666 | IPC_CREAT); 
-        //key -> unique & identified by the user 
-        //buffer_id -> unique, returned by shmget & assigned by os  
-    return buffer_id;
+// Semaphore names
+const char* SEM_EMPTY = "/sem_empty";
+const char* SEM_FULL = "/sem_full";
+const char* SEM_MUTEX = "/sem_mutex";
+
+// Initialize shared memory and semaphores (parent process)
+void initialize_shared_resources() {
+    int shm_id = shmget(SHARED_MEM_KEY, sizeof(buffer) + sizeof(commodity) * BUFFER_SIZE, IPC_CREAT | 0666);
+if (shm_id == ERROR) {
+    perror("shmget failed");
+    exit(1);
 }
 
-buffer* attach_buffer(int size){    //attach the producer to buffer
-    int shared_buffer_id = get_shared_buffer(size);
-    buffer *result;
-
-    if (shared_buffer_id == ERROR){
-        return NULL;
-    }
-    result = (buffer*) shmat(shared_buffer_id, NULL,0 );
-    if (result == (buffer *)ERROR){
-        return NULL;
-    }
-if (result->e == nullptr || result->n == nullptr || result->mutex == nullptr) {
-        result->e = sem_open("/e", O_CREAT, 0644, size);   // Number of empty slots initially
-        result->n = sem_open("/n", O_CREAT, 0644, 0);       // Number of full slots initially 0
-        result->mutex = sem_open("/mutex", O_CREAT, 0644, 1); // Binary semaphore for mutual exclusion
+    buffer* buf = (buffer*)shmat(shm_id, nullptr, 0);
+    if (buf == (void*)ERROR) {
+        perror("shmat failed");
+        exit(1);
     }
 
-    return result;
+    // Initialize the buffer
+    memset(buf, 0, sizeof(buffer));
+    shmdt(buf);
 
+    // Initialize semaphores
+    sem_unlink(SEM_EMPTY);
+    sem_unlink(SEM_FULL);
+    sem_unlink(SEM_MUTEX);
+
+    sem_open(SEM_EMPTY, O_CREAT, 0644, BUFFER_SIZE);  // Initially BUFFER_SIZE empty slots
+    sem_open(SEM_FULL, O_CREAT, 0644, 0);            // Initially no full slots
+    sem_open(SEM_MUTEX, O_CREAT, 0644, 1);           // Mutex starts unlocked
 }
-/*
-buffer* attach_buffer_to_shm(const char* shm_name) {
-    void *ptr;
-    const char* name = shm_name;
-    
-    int fd = shm_open(name, O_CREAT | O_RDWR, 0666);
-    if (fd == -1) {
-        perror("shm_open failed");
+
+// Attach to shared memory
+buffer* attach_to_buffer() {
+    int shm_id = shmget(SHARED_MEM_KEY, sizeof(buffer), 0666);
+    if (shm_id == ERROR) {
+        perror("shmget failed");
         return nullptr;
     }
 
-    // truncate shm to size of buffer structure
-    if (ftruncate(fd, sizeof(buffer)) == -1) {  
-        perror("ftruncate failed");
-        close(fd);
+    buffer* buf = (buffer*)shmat(shm_id, nullptr, 0);
+    if (buf == (void*)ERROR) {
+        perror("shmat failed");
         return nullptr;
     }
 
-   //get ptr on shm
-    ptr = mmap(nullptr, sizeof(buffer), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (ptr == MAP_FAILED) {
-        perror("mmap failed");
-        close(fd);
-        return nullptr;
-    }
-
-    close(fd);
-
-    //return ptr to buffer attached to shm
-    return static_cast<buffer*>(ptr);
+    return buf;
 }
 
-void producer(buffer* shared_buffer);
-void consumer(buffer* shared_buffer);
-*/
+// Clean up shared resources
+void cleanup_shared_resources() {
+    shmctl(shmget(SHARED_MEM_KEY, sizeof(buffer), 0666), IPC_RMID, nullptr);
+    sem_unlink(SEM_EMPTY);
+    sem_unlink(SEM_FULL);
+    sem_unlink(SEM_MUTEX);
+}
+
 #endif

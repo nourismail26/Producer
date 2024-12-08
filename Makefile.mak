@@ -1,19 +1,20 @@
-# Use GNU compiler
-CC = g++ -g
+CC = g++
+CFLAGS = -std=c++17 -Wall
+LDFLAGS = -pthread
 
-all: producer consumer
+all: producernew consumernew
 
-producer.o: producer.cpp
-	$(CC) -c producer.cpp
+producernew: producernew.o
+	$(CC) -o producernew producernew.o $(LDFLAGS)
 
-producer: producer.o
-	$(CC) -o producer producer.o
+consumernew: consumernew.o
+	$(CC) -o consumernew consumernew.o $(LDFLAGS)
 
-consumer.o: consumer.cpp
-	$(CC) -c consumer.cpp
+producernew.o: producernew.cpp buffer.h
+	$(CC) $(CFLAGS) -c producernew.cpp
 
-consumer: consumer.o
-	$(CC) -o consumer consumer.o
+consumernew.o: consumernew.cpp buffer.h
+	$(CC) $(CFLAGS) -c consumernew.cpp
 
 clean:
-	rm -f producer *.o consumer *.o
+	rm -f *.o producernew consumernew
