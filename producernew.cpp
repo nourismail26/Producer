@@ -29,33 +29,37 @@ commodity intialize_commodity(const char* Name , double mean , double stddev){
     strncpy(c.name, Name, sizeof(c.name) - 1);
     c.name[sizeof(c.name) - 1] = '\0'; 
     c.price = generate_price(mean, stddev);
-
-    // Get a unique ID from shared memory
+   
     c.id = get_next_id();
+    std::fill(std::begin(c.priceHistory), std::end(c.priceHistory), 0.00);
     message = "Generating a new value of " + std::to_string(c.price) + " with ID: " + std::to_string(c.id) + "\n";
+    printf("Commodity initialized: Name = %s, ID = %d, Initial Price = %.2f\n", c.name, c.id, c.price);
     return c;
 
 }
-commodity produce(const char* Name, double mean, double stddev, int id) {
-    commodity c;
-    strncpy(c.name, Name, sizeof(c.name) - 1);
-    c.name[sizeof(c.name) - 1] = '\0'; 
-    c.price = generate_price(mean, stddev);
-
-    // Use the provided ID to ensure the same ID is used for each commodity
-    c.id = id;
-    message = "Generating a new value of " + std::to_string(c.price) + " with ID: " + std::to_string(c.id) + "\n";
-    return c;
+void update_commodity_prices(commodity& c) {
+   for (int i = 3; i > 0; --i) {
+        c.priceHistory[i] = c.priceHistory[i - 1];
+    }
+    c.priceHistory[0] = c.price; // Set the new price as the first element
 }
+
+commodity produce(commodity item,int mean,int stddev) {
+    
+    item.price = generate_price(mean, stddev);
+    update_commodity_prices(item); 
+    message = "Generating a new value of " + std::to_string(item.price) + " with ID: " + std::to_string(item.id) + "\n";
+    return item;
+}
+
 bool add_to_buffer(buffer* b, commodity c,int N_input) {
-    // Add the commodity to the buffer at the current in_index
     b->items[b->in_index] = c;
-
-    // Increment the in_index and wrap around for circular buffer
     b->in_index = (b->in_index + 1) % N_input;
-
-    // Log the action
     message = "Added a commodity to buffer: " + std::string(c.name)+ " with price " + std::to_string(c.price) + "\n";
+    printf("Added to buffer with  Price History: ");
+for (double price : c.priceHistory) {
+    printf("%.2f ", price);
+}
     return true;
 }
 void logMessage(std::string name){
@@ -74,7 +78,6 @@ void sleep(int sleepInterval){
     std::this_thread::sleep_for(std::chrono::milliseconds(sleepInterval)); //to wait for a while before reproducing
 }
 void producer(const char* name, double mean,double stddev, int sleepInterval ,int N_input) {
-    // Attach to shared memory
     buffer* buf = attach_to_buffer();
     if (!buf) {
         std::cerr << "Error: Failed to attach to shared buffer.\n";
@@ -92,27 +95,24 @@ void producer(const char* name, double mean,double stddev, int sleepInterval ,in
     }
     static commodity item = intialize_commodity(name, mean, stddev);
     // Produce an item
+    while(true){
     sem_wait(empty);  // Wait for an empty slot
-   commodity produced_item = produce(name, mean, stddev, item.id);
+    item= produce( item,mean,stddev);          
     logMessage(name);
     message = "Trying to get mutex on shared buffer\n";
     logMessage(name);
-    sem_wait(mutex);  // Lock the critical section
+    sem_wait(mutex);  
     std::cout << "Producer acquired mutex, modifying buffer..." << std::endl;
-        if (add_to_buffer(buf, item,N_input)) {
+        if (add_to_buffer(buf,item,N_input)) {
             logMessage(name);  // Log success
         }
-   // commodity item;
-   // strncpy(item.name, name, sizeof(item.name) - 1);
-   // item.price = price;
-
     std::cout << "Produced: " << item.name << ", " << item.price << "\n";
-
-    sem_post(mutex);  // Unlock the critical section
-    sem_post(full);   // Signal a full slot
-     message = "Sleeping for " + std::to_string(sleepInterval) + " ms\n";
-        logMessage(name);
-        sleep(sleepInterval);
+    sem_post(mutex);  
+    sem_post(full);   
+    message = "Sleeping for " + std::to_string(sleepInterval) + " ms\n";
+    logMessage(name);
+    sleep(sleepInterval);
+        }
 }
 
 int main(int argc, char* argv[]) {
@@ -146,14 +146,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "Error: Commodity name must be shorter than 10 characters.\n";
         return 1;
     }
-  /*  if (argc < 3) {
-        std::cerr << "Usage: " << argv[0] << " <name> <price>\n";
-        return 1;
-    }
-
-    const char* name = argv[1];
-    double price = std::stod(argv[2]);*/
-while(1)
+//while(1)
     producer(name,mean,stddev,sleepInterval,N_input);
     return 0;
 }

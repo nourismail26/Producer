@@ -15,91 +15,34 @@
 
 #define shm_key 1234
 
-// Data structures for tracking commodities
-struct CommodityKey {
-    std::string name;
-    int id;
-
-    bool operator==(const CommodityKey& other) const {
-        return name == other.name && id == other.id;
-    }
-};
-
-// Custom hash function for CommodityKey
-struct CommodityKeyHash {
-    std::size_t operator()(const CommodityKey& key) const {
-        return std::hash<std::string>()(key.name) ^ std::hash<int>()(key.id);
-    }
-};
-
-std::unordered_map<CommodityKey, std::vector<double>, CommodityKeyHash> priceHistory;
-struct TrackedCommodity {
-    commodity c;
-    double avgPrice;
-};
-TrackedCommodity consumed[5];
 int N_input;
 int count = 0; // Number of currently tracked commodities
-double calculateAverage(const CommodityKey& key) {
-    const auto& prices = priceHistory[key];// auto automatically set type and & for refrence to prices not the actual value
-    if (prices.empty()) return 0.0;
-
+double calculateAverage(const commodity& c) {
     double sum = 0.0;
-    for (double price : prices) {
-        sum += price;
-    }
-    return sum / prices.size();
-}
-
-void updateConsumed(commodity c) {
-    CommodityKey key = {c.name, c.id};
-    // Update price history for the commodity
-    auto& prices = priceHistory[key];
-    prices.push_back(c.price);  // Add the current price
-    if (prices.size() > 5) {    // Keep up to 5 prices (current + last 4)
-        prices.erase(prices.begin());
-    }
-    // Debugging: Print the price history for verification
-    printf("UPDATED PRICES :Commodity: %s, ID: %d, History: ", key.name.c_str(), key.id);
-    for (double p : prices) {
-        printf("%.2f ", p);
-    }
-    printf("\n");
-    // Calculate the average of the last 5 prices
-    double avgPrice = calculateAverage(key);
-    // Check if the commodity already exists in the consumed array
-    bool updated = false;
-    for (int i = 0; i < count; ++i) {
-        if (strcmp(consumed[i].c.name, c.name) == 0) {  // Match by name
-            consumed[i] = {c, avgPrice};               // Update commodity details
-            updated = true;
-            break;
+    int count = 0;
+  for (double price : c.priceHistory) {
+        if (price > 0.0) {
+            sum += price;
+            count++;
         }
     }
-    // If not found and the array is not full, add the commodity
-    if (!updated) {
-        if (count < 4) {
-            consumed[count++] = {c, avgPrice};
-        } else {  // Shift the oldest out if the array is full
-            for (int i = 0; i < 4; ++i) {
-                consumed[i] = consumed[i + 1];
-            }
-            consumed[4] = {c, avgPrice};
-        }
-    }
-    std::sort(consumed, consumed + count, [](const TrackedCommodity& a, const TrackedCommodity& b) {
-        return strcmp(a.c.name, b.c.name) < 0;
-    });
-}
 
-void print_table() {
+    return (count > 0) ? sum / count : 0.0;
+}
+void update_commodity_prices(commodity& c,double new_price) {
+   for (int i = 3; i > 0; --i) {
+        c.priceHistory[i] = c.priceHistory[i - 1];
+    }
+    c.priceHistory[0] = new_price; // Set the new price as the first element
+}
+void print_table(buffer* buf, int buffer_size) {
     const char* commodityNames[11] = {
         "ALUMINIUM", "COPPER", "COTTON", "CRUDEOIL", "GOLD", 
         "LEAD", "MENTHAOIL", "NATURALGAS", "NICKEL", "SILVER", "ZINC"
     };
 
     printf("+-------------------------------------------+\n");
-    printf("| Currency     |   Price   |   AvgPrice    |\n");
+    printf("| Commodity     |   Price   |   AvgPrice    |\n");
     printf("+-------------------------------------------+\n");
 
     // Loop through all known commodity names
@@ -108,35 +51,34 @@ void print_table() {
         double avgPrice = 0.00;  // Default average price is 0.00
         const char* arrow = " "; // Default arrow for no change
         const char* color = "\033[;34m"; // Default color (blue)
-
-        // Check if the commodity is in the price history
-        bool found = false;
-        for (const auto& pair : priceHistory) {
-            if (std::string(pair.first.name) == name) {
-                found = true;
-                price = pair.second.back(); // Current price is the last entry
-                avgPrice = std::accumulate(pair.second.begin(), pair.second.end(), 0.0) / pair.second.size();
-
-                // Compare the current price to the previous one, if available
-                if (pair.second.size() > 1) {
-                    double lastPrice = pair.second[pair.second.size() - 2];
-                    if (price > lastPrice) {
+         // Find the matching commodity in the buffer
+        for (int i = 0; i < buffer_size; ++i) {
+            commodity& c = buf->items[i];
+            
+            // Check if the current commodity matches the name
+            if (strcmp(c.name, name) == 0) {
+                // Calculate average price
+                avgPrice = calculateAverage(c);
+                
+                // Determine price trend
+                if (c.priceHistory[1] != 0.00) { // If there are previous prices
+                     if (c.price > c.priceHistory[1]) {
                         arrow = "\u2191";        // Unicode arrow up
                         color = "\033[;32m";     // Green for increase
-                    } else if (price < lastPrice) {
+                    } else if (c.price < c.priceHistory[1]) {
                         arrow = "\u2193";        // Unicode arrow down
                         color = "\033[;31m";     // Red for decrease
                     }
                 }
-                break;
+
+                // Store the current price in the price history  //TODO: when should we update commodity exactly
+                update_commodity_prices(c, c.price);
+                price = c.price; // Current price
+                break; // Exit loop once commodity is found
             }
         }
-
-        // Print the row for the commodity
-        printf("| %-12s | %s%8.2lf\033[0m | %10.2lf %s |\n", 
-               name, color, price, avgPrice, arrow);
-
-        // If the commodity is not found, it remains at default values
+       printf("| %-12s | %s%8.3lf\033[0m | %s%10.3lf\033[0m  %s |\n", 
+               name, color, price,color, avgPrice, arrow);
     }
 
     printf("+-------------------------------------------+\n");
@@ -144,10 +86,11 @@ void print_table() {
 }
 
 
-void consume(commodity c) {
+
+void consume(commodity c,buffer *b) {
    // std::cout << "Consuming commodity: " << c.name << " with price: " << c.price << std::endl;
-    updateConsumed(c);
-    print_table();
+   // updateConsumed(c);
+    print_table(b,10); //fix later 
 }
 
 commodity take_from_buffer(buffer* b) {
@@ -192,18 +135,13 @@ void consumer(int argc, char* argv[]) {
     }
 
     while (true) {
-        sem_wait(full);   // Wait for a full slot
-        sem_wait(mutex);  // Lock the critical section
-
-        //commodity c = take_from_buffer(buf);
-         commodity c = buf->items[buf->out_index];
-        buf->out_index = (buf->out_index ++) % BUFFER_SIZE; // Circular buffer behavior
-
-        sem_post(mutex);  // Unlock the critical section
-        sem_post(empty);  // Signal an empty slot
-        
-        consume(c);
-        std::this_thread::sleep_for(std::chrono::milliseconds(200)); // Simulate delay
+        sem_wait(full);   
+        sem_wait(mutex);  
+        commodity c = take_from_buffer(buf);
+        sem_post(mutex);  
+        sem_post(empty);  
+        consume(c,buf);
+        std::this_thread::sleep_for(std::chrono::milliseconds(200)); 
     }
 }
 

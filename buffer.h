@@ -14,18 +14,20 @@
 #define BUFFER_SIZE 10
 #define ERROR -1
 
-// Commodity structure
 struct commodity {
     char name[32];
     double price;
     int id;
+    double priceHistory[4];
+   
+
 };
 
 // Shared buffer structure
 struct buffer {
     commodity items[BUFFER_SIZE];  // Array to store commodities
-    int in_index;                 // Points to the next empty slot
-    int out_index;                // Points to the next full slot
+    int in_index=0;                 // Points to the next empty slot
+    int out_index=0;                // Points to the next full slot
 };
 
 // Semaphore names
