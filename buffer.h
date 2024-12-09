@@ -33,6 +33,7 @@ const char* SEM_EMPTY = "/sem_empty";
 const char* SEM_FULL = "/sem_full";
 const char* SEM_MUTEX = "/sem_mutex";
 const char* SEM_ID_MUTEX = "/sem_id_mutex";
+const char* SEM_MAX_PROD = "/sem_max_prod";
 
 // Initialize shared memory and semaphores 
 void initialize_shared_resources(int buffer_size) {
@@ -73,11 +74,13 @@ void initialize_shared_resources(int buffer_size) {
     sem_unlink(SEM_FULL);
     sem_unlink(SEM_MUTEX);
     sem_unlink(SEM_ID_MUTEX);
+    sem_unlink(SEM_MAX_PROD);
 
     sem_open(SEM_EMPTY, O_CREAT, 0644, buffer_size);  // Initially buffer_size empty slots
     sem_open(SEM_FULL, O_CREAT, 0644, 0);            // Initially no full slots
     sem_open(SEM_MUTEX, O_CREAT, 0644, 1);           // Mutex starts unlocked
     sem_open(SEM_ID_MUTEX, O_CREAT, 0644, 1);        // Mutex for ID counter
+    sem_open(SEM_MAX_PROD, O_CREAT, 0644, 20);    //CHANGE TO 20
 }
 
 // Attach to shared memory
@@ -132,5 +135,6 @@ void cleanup_shared_resources() {
     sem_unlink(SEM_FULL);
     sem_unlink(SEM_MUTEX);
     sem_unlink(SEM_ID_MUTEX);
+    sem_unlink(SEM_MAX_PROD);
 }
 #endif

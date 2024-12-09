@@ -99,6 +99,7 @@ void producer(const char* name, double mean,double stddev, int sleepInterval,int
     sem_t* empty = sem_open(SEM_EMPTY, 0);
     sem_t* full = sem_open(SEM_FULL, 0);
     sem_t* mutex = sem_open(SEM_MUTEX, 0);
+    sem_t* max_prod = sem_open(SEM_MAX_PROD, 0);
 
     if (!empty || !full || !mutex) {
         std::cerr << "Error: Failed to open semaphores.\n";
@@ -107,6 +108,9 @@ void producer(const char* name, double mean,double stddev, int sleepInterval,int
     static commodity item = intialize_commodity(name, mean, stddev);
     // Produce an item
     while(true){
+    message = "Waiting on max number of producers";
+    logMessage(message);
+    sem_wait(max_prod); //wait for the max number of producers
     sem_wait(empty);  // Wait for an empty slot
     item = produce( item,mean,stddev);          
     logMessage(name);
@@ -123,6 +127,7 @@ void producer(const char* name, double mean,double stddev, int sleepInterval,int
     message = "Sleeping for " + std::to_string(sleepInterval) + " ms\n";
     logMessage(name);
     sleep(sleepInterval);
+    sem_post(max_prod);
         }
 }
 

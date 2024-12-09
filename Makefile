@@ -3,7 +3,7 @@ CFLAGS = -std=c++17 -Wall
 LDFLAGS = -pthread
 
 all: producernew consumernew
-
+ 
 producernew: producernew.o
 	$(CC) -o producernew producernew.o $(LDFLAGS)
 
@@ -15,6 +15,15 @@ producernew.o: producernew.cpp buffer.h
 
 consumernew.o: consumernew.cpp buffer.h
 	$(CC) $(CFLAGS) -c consumernew.cpp
-
+	
+# Run the producer executable with arguments
+producer: producernew
+	@./producernew $(ARGS)
+ 
+# Run the consumer executable with one argument
+consumer: consumernew
+	@./consumernew $(ARG)
+ 
+# Clean the build files
 clean:
-	rm -f *.o producernew consumernew
+	rm -f producernew consumernew consumernew.o producernew.o

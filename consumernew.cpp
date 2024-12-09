@@ -88,7 +88,7 @@ void print_table(buffer* buf, int buffer_size) {
 
 void consume(commodity c,buffer *b) {
    system("clear"); //To print one table
-     print_table(b,b->size); //fix later 
+     print_table(b,b->size); 
 }
 
 commodity take_from_buffer(buffer* b) {
@@ -104,9 +104,11 @@ commodity take_from_buffer(buffer* b) {
 }
 
 void consumer(int argc, char* argv[]) {
-    
+
+    int buffersize =  atoi(argv[1]);
+    initialize_shared_resources(buffersize);
     buffer* buf = attach_to_buffer();
-    int buffer_size = buf->size;
+    //int buffer_size = buf->size;
     if (!buf) {
         std::cerr << "Error: Failed to attach to shared buffer.\n";
         exit(1);
