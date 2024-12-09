@@ -15,7 +15,6 @@
 
 #define shm_key 1234
 
-int N_input;
 int count = 0; // Number of currently tracked commodities
 double calculateAverage(const commodity& c) {
     double sum = 0.0;
@@ -88,38 +87,26 @@ void print_table(buffer* buf, int buffer_size) {
 
 
 void consume(commodity c,buffer *b) {
-   // std::cout << "Consuming commodity: " << c.name << " with price: " << c.price << std::endl;
-   // updateConsumed(c);
-    print_table(b,10); //fix later 
+   system("clear"); //To print one table
+     print_table(b,b->size); //fix later 
 }
 
 commodity take_from_buffer(buffer* b) {
-    if (b->out_index < 0 || b->out_index >= N_input) {
+    if (b->out_index < 0 || b->out_index >= b->size) {
         std::cerr << "Error: out_index is out of bounds." << std::endl;
         return {};
     }
 
     commodity c = b->items[b->out_index];
-    //std::cout << "Commodity taken from buffer: Name = " << c.name
-      //        << ", Price = " << c.price << std::endl;
-    b->out_index = (b->out_index + 1) % N_input;
+     b->out_index = (b->out_index + 1) % b->size;
 
     return c;
 }
 
 void consumer(int argc, char* argv[]) {
-    if (argc < 2) {
-        std::cerr << "Usage: <program_name> <size of buffer>\n";
-        return;
-    }
-
-    N_input = std::stoi(argv[1]);
-    if (N_input <= 0) {
-        std::cerr << "Buffer size must be a positive integer.\n";
-        return;
-    }
-
+    
     buffer* buf = attach_to_buffer();
+    int buffer_size = buf->size;
     if (!buf) {
         std::cerr << "Error: Failed to attach to shared buffer.\n";
         exit(1);
@@ -146,7 +133,23 @@ void consumer(int argc, char* argv[]) {
 }
 
 int main(int argc, char* argv[]) {
-   // while(1)
+    if (argc < 2) {
+        std::cerr << "Usage: <program_name> <size of buffer>\n";
+        return 0;
+    }
+    if (argc > 1 && std::string(argv[1]) == "clean") {
+        cleanup_shared_resources();
+        std::cout << "Shared resources cleaned.\n";
+        return 0;
+    }
+    int buffer_size = std::stoi(argv[1]);
+if (buffer_size <= 0) {
+    std::cerr << "Buffer size must be a positive integer.\n";
+    exit(1);
+}
+     initialize_shared_resources( buffer_size );
+        std::cout << "Shared resources initialized.\n";
+        
     consumer(argc, argv);
     return 0;
 }

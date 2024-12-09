@@ -11,7 +11,7 @@
 
 #define SHARED_MEM_KEY 1234
 #define SHARED_ID_KEY 5678
-#define BUFFER_SIZE 10
+
 #define ERROR -1
 
 struct commodity {
@@ -19,15 +19,13 @@ struct commodity {
     double price;
     int id;
     double priceHistory[4];
-   
-
 };
-
 // Shared buffer structure
 struct buffer {
-    commodity items[BUFFER_SIZE];  // Array to store commodities
-    int in_index=0;                 // Points to the next empty slot
-    int out_index=0;                // Points to the next full slot
+     int in_index;                 // Points to the next empty slot
+    int out_index;                  // Points to the next full slot
+    int size ;    
+    commodity items[];          
 };
 
 // Semaphore names
@@ -36,24 +34,26 @@ const char* SEM_FULL = "/sem_full";
 const char* SEM_MUTEX = "/sem_mutex";
 const char* SEM_ID_MUTEX = "/sem_id_mutex";
 
-// Initialize shared memory and semaphores (parent process)
-void initialize_shared_resources() {
-    int shm_id = shmget(SHARED_MEM_KEY, sizeof(buffer), IPC_CREAT | 0666);
-    if (shm_id == ERROR) {
-        perror("shmget failed");
-        exit(1);
-    }
-
+// Initialize shared memory and semaphores 
+void initialize_shared_resources(int buffer_size) {
+     printf("Requested shared memory size: %zu bytes\n", sizeof(buffer) + (buffer_size * sizeof(commodity) ));
+     int shm_id = shmget(SHARED_MEM_KEY, sizeof(buffer) + buffer_size * sizeof(commodity), IPC_CREAT | 0666);
+     if (shm_id == -1) {
+       perror("shmget failed here inn");
+       exit(1);
+          }  
     buffer* buf = (buffer*)shmat(shm_id, nullptr, 0);
     if (buf == (void*)ERROR) {
         perror("shmat failed");
         exit(1);
     }
-
-    // Initialize the buffer
-    memset(buf, 0, sizeof(buffer));
-    shmdt(buf);
-
+      //memset(buf, 0, sizeof(buffer));
+     // buf->items = (commodity*)(1+sizeof(buffer));
+      buf->size = buffer_size;
+      buf->in_index=0;
+      buf->out_index=0;
+       
+       shmdt(buf);
     // Initialize shared ID counter
     int id_shm_id = shmget(SHARED_ID_KEY, sizeof(int), IPC_CREAT | 0666);
     if (id_shm_id == ERROR) {
@@ -74,7 +74,7 @@ void initialize_shared_resources() {
     sem_unlink(SEM_MUTEX);
     sem_unlink(SEM_ID_MUTEX);
 
-    sem_open(SEM_EMPTY, O_CREAT, 0644, BUFFER_SIZE);  // Initially BUFFER_SIZE empty slots
+    sem_open(SEM_EMPTY, O_CREAT, 0644, buffer_size);  // Initially buffer_size empty slots
     sem_open(SEM_FULL, O_CREAT, 0644, 0);            // Initially no full slots
     sem_open(SEM_MUTEX, O_CREAT, 0644, 1);           // Mutex starts unlocked
     sem_open(SEM_ID_MUTEX, O_CREAT, 0644, 1);        // Mutex for ID counter
@@ -82,9 +82,9 @@ void initialize_shared_resources() {
 
 // Attach to shared memory
 buffer* attach_to_buffer() {
-    int shm_id = shmget(SHARED_MEM_KEY, sizeof(buffer), 0666);
+    int shm_id = shmget(SHARED_MEM_KEY, 0, 0666);
     if (shm_id == ERROR) {
-        perror("shmget failed");
+        perror("shmget failed ");
         return nullptr;
     }
 
@@ -96,6 +96,7 @@ buffer* attach_to_buffer() {
 
     return buf;
 }
+
 
 // Get the next unique ID
 int get_next_id() {
@@ -132,5 +133,4 @@ void cleanup_shared_resources() {
     sem_unlink(SEM_MUTEX);
     sem_unlink(SEM_ID_MUTEX);
 }
-
 #endif

@@ -17,7 +17,6 @@
 #define shm_key 1234
 #define ERROR -1
 std::string message ;  //global variable -> to track the message to be logged 
-int global_commodity_id = 0;  // Global counter to track IDs
 
 double generate_price(double mean, double stddev){
     static std::default_random_engine generator;
@@ -52,12 +51,20 @@ commodity produce(commodity item,int mean,int stddev) {
     return item;
 }
 
-bool add_to_buffer(buffer* b, commodity c,int N_input) {
+bool add_to_buffer(buffer* b, commodity c) {
+    printf("here");
+    if (b->in_index < 0 || b->in_index >= b->size) {
+        std::cerr << "Error: out_index is out of bounds." << std::endl;
+        return {};
+    }
+
     b->items[b->in_index] = c;
-    b->in_index = (b->in_index + 1) % N_input;
+    printf("Put c in array");
+    b->in_index = (b->in_index + 1) % b->size;
+    printf("Increment inIndex");
     message = "Added a commodity to buffer: " + std::string(c.name)+ " with price " + std::to_string(c.price) + "\n";
     printf("Added to buffer with  Price History: ");
-for (double price : c.priceHistory) {
+   for (double price : c.priceHistory) {
     printf("%.2f ", price);
 }
     return true;
@@ -77,10 +84,14 @@ void logMessage(std::string name){
 void sleep(int sleepInterval){
     std::this_thread::sleep_for(std::chrono::milliseconds(sleepInterval)); //to wait for a while before reproducing
 }
-void producer(const char* name, double mean,double stddev, int sleepInterval ,int N_input) {
+void producer(const char* name, double mean,double stddev, int sleepInterval,int buffer_size ) {
     buffer* buf = attach_to_buffer();
     if (!buf) {
         std::cerr << "Error: Failed to attach to shared buffer.\n";
+        exit(1);
+    }
+    if(buf->size != buffer_size){
+          std::cerr << "Error: Buffer size must be same as defined in consumer.\n";
         exit(1);
     }
 
@@ -97,13 +108,13 @@ void producer(const char* name, double mean,double stddev, int sleepInterval ,in
     // Produce an item
     while(true){
     sem_wait(empty);  // Wait for an empty slot
-    item= produce( item,mean,stddev);          
+    item = produce( item,mean,stddev);          
     logMessage(name);
     message = "Trying to get mutex on shared buffer\n";
     logMessage(name);
     sem_wait(mutex);  
     std::cout << "Producer acquired mutex, modifying buffer..." << std::endl;
-        if (add_to_buffer(buf,item,N_input)) {
+        if (add_to_buffer(buf,item)) {
             logMessage(name);  // Log success
         }
     std::cout << "Produced: " << item.name << ", " << item.price << "\n";
@@ -116,16 +127,7 @@ void producer(const char* name, double mean,double stddev, int sleepInterval ,in
 }
 
 int main(int argc, char* argv[]) {
-    if (argc > 1 && std::string(argv[1]) == "init") {
-        initialize_shared_resources();
-        std::cout << "Shared resources initialized.\n";
-        return 0;
-    }
-    if (argc > 1 && std::string(argv[1]) == "clean") {
-        cleanup_shared_resources();
-        std::cout << "Shared resources cleaned.\n";
-        return 0;
-    }
+    
      if (argc < 6) {
         std::cerr << "Usage: <program_name> <commodity> <mean> <stddev> <sleep interval> <size of buffer>\n";
         return 1;
@@ -135,9 +137,9 @@ int main(int argc, char* argv[]) {
     double mean = std::stod(argv[2]);
     double stddev = std::stod(argv[3]);
     int sleepInterval = std::stoi(argv[4]); // in milliseconds
-    int N_input = std::stoi(argv[5]);
+    int buffer_size = std::stoi(argv[5]);
 
-    if (N_input <= 0) {
+    if (buffer_size <= 0) {
         std::cerr << "Buffer size must be a positive integer.\n";
         return 1;
     }
@@ -146,7 +148,6 @@ int main(int argc, char* argv[]) {
         std::cerr << "Error: Commodity name must be shorter than 10 characters.\n";
         return 1;
     }
-//while(1)
-    producer(name,mean,stddev,sleepInterval,N_input);
+    producer(name,mean,stddev,sleepInterval,buffer_size);
     return 0;
 }
