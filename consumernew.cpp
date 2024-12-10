@@ -103,10 +103,8 @@ commodity take_from_buffer(buffer* b) {
     return c;
 }
 
-void consumer(int argc, char* argv[]) {
+void consumer() {
 
-    int buffersize =  atoi(argv[1]);
-    initialize_shared_resources(buffersize);
     buffer* buf = attach_to_buffer();
     //int buffer_size = buf->size;
     if (!buf) {
@@ -144,14 +142,17 @@ int main(int argc, char* argv[]) {
         std::cout << "Shared resources cleaned.\n";
         return 0;
     }
+    
     int buffer_size = std::stoi(argv[1]);
-if (buffer_size <= 0) {
+    if (buffer_size <= 0) {
     std::cerr << "Buffer size must be a positive integer.\n";
     exit(1);
-}
-     initialize_shared_resources( buffer_size );
-        std::cout << "Shared resources initialized.\n";
-        
-    consumer(argc, argv);
+    }
+
+    initialize_shared_resources( buffer_size );
+    std::cout << "Shared resources initialized.\n";
+    
+    consumer();
+
     return 0;
 }
