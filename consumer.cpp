@@ -15,80 +15,92 @@
 
 #define shm_key 1234
 
-int count = 0; // Number of currently tracked commodities
-double calculateAverage(const commodity& c) {
-    double sum = 0.0;
-    int count = 0;
-  for (double price : c.priceHistory) {
-        if (price > 0.0) {
-            sum += price;
+double consumed[11][4]; //matrix -> to track el last 4 consumed
+double table[11][2] = {0.0}; //matrix -> to keep the prints of the table
+const char *commodities[11] = {
+        "ALUMINIUM", "COPPER", "COTTON", "CRUDEOIL", "GOLD",
+        "LEAD", "MENTHAOIL", "NATURALGAS", "NICKEL", "SILVER", "ZINC"
+    };
+
+
+double calculateAverage(int row,double price) {
+    double sum = price; //ptice el currrent
+    int count = 1;
+  for (int i=0;i<4;i++) { //loop tegeeb prices ely ably
+        if (consumed[row][i] > 0.0) {
+            sum += consumed[row][i];
             count++;
         }
     }
 
     return (count > 0) ? sum / count : 0.0;
 }
-void update_commodity_prices(commodity& c,double new_price) {
-   for (int i = 3; i > 0; --i) {
-        c.priceHistory[i] = c.priceHistory[i - 1];
-    }
-    c.priceHistory[0] = new_price; // Set the new price as the first element
-}
-void print_table(buffer* buf, int buffer_size) {
-    const char* commodityNames[11] = {
-        "ALUMINIUM", "COPPER", "COTTON", "CRUDEOIL", "GOLD", 
-        "LEAD", "MENTHAOIL", "NATURALGAS", "NICKEL", "SILVER", "ZINC"
-    };
 
+void update_commodity_prices(double new_price, int row) {
+   for (int i = 3; i > 0; --i) {
+        consumed[row][i] = consumed[row][i - 1];
+    }
+    consumed[row][0] = new_price; 
+}
+int getRow( char* name){
+    // badawar 3ala el asm 3ashan arga3 rakamo
+    for (int i = 0; i < 11; i++) {
+        if (strcmp(name, commodities[i]) == 0) {
+            return i;  // la2eeto
+        }
+    }
+
+    return -1;  // mal2ethoosh
+}
+void printCommodityTable() {
+    // Print the table header
     printf("+-------------------------------------------+\n");
     printf("| Commodity     |   Price   |   AvgPrice    |\n");
     printf("+-------------------------------------------+\n");
 
-    // Loop through all known commodity names
-    for (const auto& name : commodityNames) {
-        double price = 0.00;     // Default price is 0.00
-        double avgPrice = 0.00;  // Default average price is 0.00
-        const char* arrow = " "; // Default arrow for no change
-        const char* color = "\033[;34m"; // Default color (blue)
-         // Find the matching commodity in the buffer
-        for (int i = 0; i < buffer_size; ++i) {
-            commodity& c = buf->items[i];
-            
-            // Check if the current commodity matches the name
-            if (strcmp(c.name, name) == 0) {
-                // Calculate average price
-                avgPrice = calculateAverage(c);
-                
-                // Determine price trend
-                if (c.priceHistory[1] != 0.00) { // If there are previous prices
-                     if (c.price > c.priceHistory[1]) {
-                        arrow = "\u2191";        // Unicode arrow up
-                        color = "\033[;32m";     // Green for increase
-                    } else if (c.price < c.priceHistory[1]) {
-                        arrow = "\u2193";        // Unicode arrow down
-                        color = "\033[;31m";     // Red for decrease
-                    }
-                }
+    const char *blue = "\033[34m";   // Blue color
+    const char *reset = "\033[0m";   // Reset color to default
+    const char *red = "\033[;31m";     // Red for decrease
+    const char *green = "\033[;32m";     
 
-                // Store the current price in the price history  //TODO: when should we update commodity exactly
-                update_commodity_prices(c, c.price);
-                price = c.price; // Current price
-                break; // Exit loop once commodity is found
-            }
+    // Loop through each commodity and print the details
+    for (int i = 0; i < 11; i++) {
+        printf("| %-12s | ", commodities[i]);
+        
+        if (table[i][0] == 0.0) {
+            printf("%s%9.3f%s", blue, table[i][0], reset);
+        } else {
+                if (consumed[i][1] < consumed[i][0]) // if i increased 
+                printf("%s%9.3f%s", green, table[i][0], reset);
+                else
+                 printf("%s%9.3f%s", red, table[i][0], reset);
         }
-       printf("| %-12s | %s%8.3lf\033[0m | %s%10.3lf\033[0m  %s |\n", 
-               name, color, price,color, avgPrice, arrow);
+
+        printf(" | ");
+        
+        if (table[i][1] == 0.0) { //print el default -> blue
+            printf("%s%12.3f%s", blue, table[i][1], reset);
+        } else {
+             if (consumed[i][1] < consumed[i][0]) // if i increased -> green
+            printf("%s%12.3f%s↑",green, table[i][1], reset);
+            else                                  //if i decresed -> red
+            printf("%s%12.3f%s↓",red, table[i][1], reset);
+        }
+            
+        printf(" |\n");
     }
 
     printf("+-------------------------------------------+\n");
-    fflush(stdout);
 }
 
-
-
 void consume(commodity c,buffer *b) {
-   system("clear"); //To print one table
-     print_table(b,b->size); 
+    double price = c.price;
+    int row = getRow(c.name);
+    table[row][0] = price;
+    double average = calculateAverage(row,price);
+    table[row][1] = average;
+    update_commodity_prices(price,row);
+    printCommodityTable(); 
 }
 
 commodity take_from_buffer(buffer* b) {
@@ -103,10 +115,13 @@ commodity take_from_buffer(buffer* b) {
     return c;
 }
 
+void sleep(int sleepInterval){
+    std::this_thread::sleep_for(std::chrono::milliseconds(sleepInterval)); 
+}
+
 void consumer() {
 
     buffer* buf = attach_to_buffer();
-    //int buffer_size = buf->size;
     if (!buf) {
         std::cerr << "Error: Failed to attach to shared buffer.\n";
         exit(1);
@@ -128,7 +143,7 @@ void consumer() {
         sem_post(mutex);  
         sem_post(empty);  
         consume(c,buf);
-        std::this_thread::sleep_for(std::chrono::milliseconds(200)); 
+        sleep(200); 
     }
 }
 

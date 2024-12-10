@@ -20,9 +20,10 @@ struct commodity {
     int id;
     double priceHistory[4];
 };
+
 // Shared buffer structure
 struct buffer {
-     int in_index;                 // Points to the next empty slot
+    int in_index;                 // Points to the next empty slot
     int out_index;                  // Points to the next full slot
     int size ;    
     commodity items[];          

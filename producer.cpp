@@ -20,7 +20,7 @@ std::string message ;  //global variable -> to track the message to be logged
 
 double generate_price(double mean, double stddev){
     static std::default_random_engine generator;
-    std::normal_distribution<double> dist(mean, stddev);
+    static std::normal_distribution<double> dist(mean, stddev);
     return dist(generator);
 }
 commodity intialize_commodity(const char* Name , double mean , double stddev){
@@ -52,19 +52,16 @@ commodity produce(commodity item,int mean,int stddev) {
 }
 
 bool add_to_buffer(buffer* b, commodity c) {
-    printf("here");
+
     if (b->in_index < 0 || b->in_index >= b->size) {
         std::cerr << "Error: out_index is out of bounds." << std::endl;
         return {};
     }
 
     b->items[b->in_index] = c;
-    printf("Put c in array");
     b->in_index = (b->in_index + 1) % b->size;
-    printf("Increment inIndex");
     message = "Added a commodity to buffer: " + std::string(c.name)+ " with price " + std::to_string(c.price) + "\n";
-    printf("Added to buffer with  Price History: ");
-   for (double price : c.priceHistory) {
+    for (double price : c.priceHistory) {
     printf("%.2f ", price);
 }
     return true;
@@ -131,18 +128,38 @@ void producer(const char* name, double mean,double stddev, int sleepInterval,int
         }
 }
 
+bool check_name(const char* name){
+    const char* commodities[11] = {
+        "ALUMINIUM", "COPPER", "COTTON", "CRUDEOIL", "GOLD",
+        "LEAD", "MENTHAOIL", "NATURALGAS", "NICKEL", "SILVER", "ZINC"
+    };
+
+    // Loop through the list and check if the name matches any of the commodities
+    for (int i = 0; i < 11; i++) {
+        if (strcmp(name, commodities[i]) == 0) {
+            return true;  // Found a match
+        }
+    }
+
+    return false;  // No match found
+}
 int main(int argc, char* argv[]) {
     
      if (argc < 6) {
         std::cerr << "Usage: <program_name> <commodity> <mean> <stddev> <sleep interval> <size of buffer>\n";
         return 1;
     }
-
     const char* name = argv[1];
     double mean = std::stod(argv[2]);
     double stddev = std::stod(argv[3]);
     int sleepInterval = std::stoi(argv[4]); // in milliseconds
     int buffer_size = std::stoi(argv[5]);
+
+    if (!check_name(name))
+        {
+            printf("Invalid name %s.",name);
+            return(1);
+        }
 
     if (buffer_size <= 0) {
         std::cerr << "Buffer size must be a positive integer.\n";
