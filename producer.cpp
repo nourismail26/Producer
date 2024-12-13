@@ -1,4 +1,3 @@
-#include "buffer.h"
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -12,17 +11,86 @@
 #include <sys/shm.h>
 #include <cmath>
 #include <fcntl.h>
-#include "buffer.h"
 #include <time.h>
+#include <string.h>
 #define shm_key 1234
 #define ERROR -1
+#define SHARED_MEM_KEY 1234
+#define SHARED_ID_KEY 5678
+
+// Semaphore names
+const char* SEM_EMPTY = "/sem_empty";
+const char* SEM_FULL = "/sem_full";
+const char* SEM_MUTEX = "/sem_mutex";
+const char* SEM_ID_MUTEX = "/sem_id_mutex";
+const char* SEM_MAX_PROD = "/sem_max_prod";
+
+
+struct commodity {
+    char name[32];
+    double price;
+    int id;
+    double priceHistory[4];
+};
+
+//shared buff struct
+struct buffer {
+    int in_index;                 //awel heta fadia
+    int out_index;                  //awel heta malyana
+    int size ;    
+    commodity items[];          
+};
+
 std::string message ;  //global variable -> to track the message to be logged 
+
+// Attach to shared memory
+buffer* attach_to_buffer() {
+    int shm_id = shmget(SHARED_MEM_KEY, 0, 0666);
+    if (shm_id == ERROR) {
+        perror("shmget failed ");
+        return nullptr;
+    }
+
+    buffer* buf = (buffer*)shmat(shm_id, nullptr, 0);
+    if (buf == (void*)ERROR) {
+        perror("shmat failed");
+        return nullptr;
+    }
+
+    return buf;
+}
 
 double generate_price(double mean, double stddev){
     static std::default_random_engine generator;
     static std::normal_distribution<double> dist(mean, stddev);
     return dist(generator);
 }
+
+//bageeb the next unique id
+int get_next_id() {
+    int shm_id = shmget(SHARED_ID_KEY, sizeof(int), 0666);
+    if (shm_id == ERROR) {
+        perror("shmget (ID counter) failed");
+        exit(1);
+    }
+
+    int* id_counter = (int*)shmat(shm_id, nullptr, 0);
+    if (id_counter == (void*)ERROR) {
+        perror("shmat (ID counter) failed");
+        exit(1);
+    }
+
+    // Increment the ID atomically
+    sem_t* id_mutex = sem_open(SEM_ID_MUTEX, 0);
+    sem_wait(id_mutex);
+    int id = (*id_counter)++;
+    sem_post(id_mutex);
+    sem_close(id_mutex);
+
+    shmdt(id_counter);
+    return id;
+}
+                                                            
 commodity intialize_commodity(const char* Name , double mean , double stddev){
     commodity c;
     strncpy(c.name, Name, sizeof(c.name) - 1);
@@ -31,8 +99,7 @@ commodity intialize_commodity(const char* Name , double mean , double stddev){
    
     c.id = get_next_id();
     std::fill(std::begin(c.priceHistory), std::end(c.priceHistory), 0.00);
-    message = "Generating a new value of " + std::to_string(c.price) + " with ID: " + std::to_string(c.id) + "\n";
-    printf("Commodity initialized: Name = %s, ID = %d, Initial Price = %.2f\n", c.name, c.id, c.price);
+    message = "Generating a new value " + std::to_string(c.price)+ "\n";
     return c;
 
 }
@@ -40,17 +107,17 @@ void update_commodity_prices(commodity& c) {
    for (int i = 3; i > 0; --i) {
         c.priceHistory[i] = c.priceHistory[i - 1];
     }
-    c.priceHistory[0] = c.price; // Set the new price as the first element
+    c.priceHistory[0] = c.price; //hahot agdad price fi awel el array
 }
 
 commodity produce(commodity item,int mean,int stddev) {
     
     item.price = generate_price(mean, stddev);
     update_commodity_prices(item); 
-    message = "Generating a new value of " + std::to_string(item.price) + " with ID: " + std::to_string(item.id) + "\n";
+    message = "Generating a new value of " + std::to_string(item.price) + "\n";
     return item;
 }
-
+//bethot el new commodity fi el buffer
 bool add_to_buffer(buffer* b, commodity c) {
 
     if (b->in_index < 0 || b->in_index >= b->size) {
@@ -60,12 +127,10 @@ bool add_to_buffer(buffer* b, commodity c) {
 
     b->items[b->in_index] = c;
     b->in_index = (b->in_index + 1) % b->size;
-    message = "Added a commodity to buffer: " + std::string(c.name)+ " with price " + std::to_string(c.price) + "\n";
-    for (double price : c.priceHistory) {
-    printf("%.2f ", price);
-}
+    message = "Added a commodity to buffer with price " + std::to_string(c.price) + "\n";
     return true;
 }
+//bet log el message bel date
 void logMessage(std::string name){
 
     timespec timeptr;
@@ -78,9 +143,11 @@ void logMessage(std::string name){
     message =  left+ temp +"]"+ space +name+ space+ message;
     std::cerr << message << std::endl;
 }
+
 void sleep(int sleepInterval){
     std::this_thread::sleep_for(std::chrono::milliseconds(sleepInterval)); //to wait for a while before reproducing
 }
+
 void producer(const char* name, double mean,double stddev, int sleepInterval,int buffer_size ) {
     buffer* buf = attach_to_buffer();
     if (!buf) {
@@ -105,8 +172,8 @@ void producer(const char* name, double mean,double stddev, int sleepInterval,int
     static commodity item = intialize_commodity(name, mean, stddev);
     // Produce an item
     while(true){
-    message = "Waiting on max number of producers";
-    logMessage(message);
+    message = "Waiting on max number of producers\n";
+    logMessage(name);
     sem_wait(max_prod); //wait for the max number of producers
     sem_wait(empty);  // Wait for an empty slot
     item = produce( item,mean,stddev);          
@@ -114,11 +181,8 @@ void producer(const char* name, double mean,double stddev, int sleepInterval,int
     message = "Trying to get mutex on shared buffer\n";
     logMessage(name);
     sem_wait(mutex);  
-    std::cout << "Producer acquired mutex, modifying buffer..." << std::endl;
-        if (add_to_buffer(buf,item)) {
-            logMessage(name);  // Log success
-        }
-    std::cout << "Produced: " << item.name << ", " << item.price << "\n";
+    add_to_buffer(buf,item);
+    logMessage(name);
     sem_post(mutex);  
     sem_post(full);   
     message = "Sleeping for " + std::to_string(sleepInterval) + " ms\n";
@@ -127,21 +191,18 @@ void producer(const char* name, double mean,double stddev, int sleepInterval,int
     sem_post(max_prod);
         }
 }
-
+//bet check en el name ely el user dakhlo sah
 bool check_name(const char* name){
     const char* commodities[11] = {
         "ALUMINIUM", "COPPER", "COTTON", "CRUDEOIL", "GOLD",
         "LEAD", "MENTHAOIL", "NATURALGAS", "NICKEL", "SILVER", "ZINC"
     };
-
-    // Loop through the list and check if the name matches any of the commodities
     for (int i = 0; i < 11; i++) {
         if (strcmp(name, commodities[i]) == 0) {
-            return true;  // Found a match
+            return true;  //la2eeto
         }
     }
-
-    return false;  // No match found
+    return false;  //mal2ethoosh
 }
 int main(int argc, char* argv[]) {
     
